@@ -1,6 +1,3 @@
-Here's the corrected markdown file with proper syntax and formatting:
-
-```markdown
 # Monitoring Sidecar Pattern - Documentation
 
 ## Overview
