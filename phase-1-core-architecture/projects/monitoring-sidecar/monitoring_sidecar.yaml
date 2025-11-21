@@ -1,0 +1,188 @@
+# Monitoring Sidecar Pattern Project
+# Application generates logs → Sidecar processes and exports them
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring-demo
+
+---
+# ConfigMap: Sidecar processing script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: log-processor-config
+  namespace: monitoring-demo
+data:
+  process-logs.sh: |
+    #!/bin/sh
+    echo "Log processor started at $(date)"
+    
+    # Create processed logs directory
+    mkdir -p /var/log/processed
+    
+    # Wait for log file to exist
+    while [ ! -f /var/log/app/application.log ]; do
+      echo "Waiting for application.log..."
+      sleep 1
+    done
+    
+    # Watch for new log entries and process them
+    tail -f /var/log/app/application.log | while read line; do
+      # Parse log line
+      timestamp=$(echo "$line" | cut -d'|' -f1)
+      level=$(echo "$line" | cut -d'|' -f2)
+      message=$(echo "$line" | cut -d'|' -f3)
+      
+      # Process based on log level
+      case "$level" in
+        ERROR)
+          echo "[ALERT] $(date): ERROR detected - $message" >> /var/log/processed/alerts.log
+          ;;
+        WARN)
+          echo "[WARNING] $(date): $message" >> /var/log/processed/warnings.log
+          ;;
+        *)
+          echo "[INFO] $(date): $message" >> /var/log/processed/info.log
+          ;;
+      esac
+      
+      # Aggregate metrics
+      echo "$level" >> /var/log/processed/metrics.log
+    done
+
+---
+# Main application with sidecar
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-with-monitoring
+  namespace: monitoring-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: monitored-app
+  template:
+    metadata:
+      labels:
+        app: monitored-app
+    spec:
+      # Init container: Setup log directory
+      initContainers:
+      - name: log-setup
+        image: busybox:1.36
+        command: ['sh', '-c', 'mkdir -p /var/log/app /var/log/processed && echo "Logs initialized at $(date)" > /var/log/app/init.log']
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log
+      
+      containers:
+      # Main application container
+      - name: app
+        image: busybox:1.36
+        command: ['sh', '-c']
+        args:
+        - |
+          echo "Application starting..."
+          counter=0
+          while true; do
+            # Simulate different log levels
+            case $((counter % 10)) in
+              0|5)
+                echo "$(date +%Y-%m-%dT%H:%M:%S)|INFO|Request processed successfully (count: $counter)" >> /var/log/app/application.log
+                ;;
+              3|7)
+                echo "$(date +%Y-%m-%dT%H:%M:%S)|WARN|High memory usage detected (count: $counter)" >> /var/log/app/application.log
+                ;;
+              9)
+                echo "$(date +%Y-%m-%dT%H:%M:%S)|ERROR|Database connection failed (count: $counter)" >> /var/log/app/application.log
+                ;;
+              *)
+                echo "$(date +%Y-%m-%dT%H:%M:%S)|DEBUG|Processing data (count: $counter)" >> /var/log/app/application.log
+                ;;
+            esac
+            counter=$((counter + 1))
+            sleep 2
+          done
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/app
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "100m"
+          limits:
+            memory: "64Mi"
+            cpu: "200m"
+      
+      # Sidecar: Log processor
+      - name: log-processor
+        image: busybox:1.36
+        command: ['sh', '/config/process-logs.sh']
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log
+        - name: processor-config
+          mountPath: /config
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+      
+      # Sidecar: Metrics exporter
+      - name: metrics-exporter
+        image: busybox:1.36
+        command: ['sh', '-c']
+        args:
+        - |
+          echo "Metrics exporter started"
+          while true; do
+            sleep 10
+            if [ -f /var/log/processed/metrics.log ]; then
+              ERROR_COUNT=$(grep -c "ERROR" /var/log/processed/metrics.log 2>/dev/null || echo 0)
+              WARN_COUNT=$(grep -c "WARN" /var/log/processed/metrics.log 2>/dev/null || echo 0)
+              INFO_COUNT=$(grep -c "INFO" /var/log/processed/metrics.log 2>/dev/null || echo 0)
+              
+              echo "=== METRICS at $(date) ==="
+              echo "Errors: $ERROR_COUNT"
+              echo "Warnings: $WARN_COUNT"
+              echo "Info: $INFO_COUNT"
+              echo "=========================="
+            fi
+          done
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "25m"
+      
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: processor-config
+        configMap:
+          name: log-processor-config
+          defaultMode: 0755
+
+---
+# Service for the application
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitored-app-service
+  namespace: monitoring-demo
+spec:
+  selector:
+    app: monitored-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
