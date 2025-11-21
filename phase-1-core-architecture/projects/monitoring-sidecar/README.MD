@@ -6,25 +6,6 @@ Here's the corrected markdown file with proper syntax and formatting:
 ## Overview
 This project demonstrates the **Sidecar Pattern** in Kubernetes, where auxiliary containers run alongside the main application container to provide additional functionality like log processing and metrics collection.
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       Pod                                   │
-│  ┌─────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │             │  │                 │  │                 │  │
-│  │   Main App  │  │  Log Processor  │  │ Metrics Exporter│  │
-│  │  Container  │  │    Sidecar      │  │    Sidecar      │  │
-│  │             │  │                 │  │                 │  │
-│  └─────────────┘  └─────────────────┘  └─────────────────┘  │
-│         │                  │                     │          │
-│         ▼                  ▼                     ▼          │
-│  /var/log/app/     /var/log/processed/     Console Output   │
-│  application.log   alerts.log, warnings.log                 │
-│                     info.log, metrics.log                   │
-└─────────────────────────────────────────────────────────────┘
-```
-
 ## Key Concepts
 
 ### Sidecar Pattern
@@ -205,4 +186,3 @@ kubectl delete configmap log-processor-config -n monitoring-demo
 4. **Init Containers**: Proper initialization sequence
 5. **ConfigMaps**: Configuration separated from code
 6. **Namespaces**: Resource isolation
-```
