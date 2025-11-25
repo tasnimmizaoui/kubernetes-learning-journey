@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-rolling
+  labels:
+    app: webapp
+spec:
+  replicas: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 2    # Max 2 pods can be unavailable during update
+      maxSurge: 3          # Max 3 extra pods during update --> During update, can temporarily have 13 pods (10 + 3)
+
+      #maxUnavailable: 0     ->  No pods can be unavailable    / this is a Zero downtime config , safest but SLOWEST 
+      # maxSurge: 1          ->  Can create 1 extra pod
+
+      #maxUnavailable: 50%   -> This is the fastUpdate scenarion , fastest but Riskier 
+      #maxSurge: 50%
+  minReadySeconds: 10      # Wait 10s before considering pod ready
+  revisionHistoryLimit: 5  # Keeps 5 old ReplicaSets for rollback
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+        version: v1
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.21
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
