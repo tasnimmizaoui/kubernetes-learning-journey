@@ -1,0 +1,16 @@
+# ConfigMap for initialization script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-init
+  namespace: mongodb
+data: 
+  init.js: | 
+    // MongoDB initialization script
+    db = db.getSiblingDB('testdb');
+    db.users.insertOne({
+      name: "TestUser",
+      email: "test@example.com",
+      created: new Date()
+    });
+    print("Database initialized!");

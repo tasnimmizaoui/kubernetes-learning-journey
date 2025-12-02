@@ -1,0 +1,15 @@
+# A headless service that enables DNS for each pod 
+apiVersion: v1
+kind: Service 
+metadata: 
+  name: monodb-service 
+  namespace: mongodb
+  labels:
+    app: mongodb 
+spec: 
+  ports: 
+  - port: 27017
+    targetPort: 27017 
+  clusterIp: None # Headless service - no load balancing
+  selector: 
+    app: mongodb

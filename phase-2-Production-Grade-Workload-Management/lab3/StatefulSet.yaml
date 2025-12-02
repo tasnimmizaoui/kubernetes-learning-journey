@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mongodb
+---
+apiVersion: apps/v1
+kind: StatefulSet 
+metadata:
+  name: mongodb
+  namespace: mongodb
+sepc: 
+  serviceName: monodb-service # matches the headless service 
+  replicas: 3
+  selector: 
+    matchLabels: 
+      app: mongodb
+  # Update Strategy 
+  UpdateStrategy: 
+    type: RollingUpdate 
+    rollingUpdate: 
+      partition: 0  # Update all pods( change to 2 for canary ) 
+  
+  # Pod Disruption Budget compatibility 
+  minReadySeconds: 10 
+  template: 
+    metadata:
+      labels:
+        app: mongodb
+      spec:
+      # Anti affinity: Spread Pods across nodes 
+        affinity:
+          podAntiAffinity: 
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+            podAffintyTerm: 
+              labelSelector: 
+                matchExpressions: 
+                - key: app 
+                  operator: In 
+                  values: 
+                  - mongodb 
+              topologyKey: kubernetes.io/hostname     
+    
+      containers:
+      - name: mongodb
+        image: mongo:5.0
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        # Resource limits
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+        # Volume mounts for data persistance; 
+        volumeMounts: 
+        - name: mongodb-data 
+          mountPath: /data/db
+
+        env: 
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: "admin"
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          value: "password123" # In production  we use Secret!
+
+        livenessProbe: 
+          exec: 
+            command: 
+            - mongo 
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10 
+          timeoutSecond: 5 
+
+        readinessProbes: 
+          exec: 
+            command: 
+            - mongo 
+            - --eval 
+            - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+        
+        # Volume claim template Creates a PVC for EACH POD  ( est une demande de stockage par un utilisateur. )
+        # Il est similaire à un Pod. Les pods consomment des ressources de noeud et les PVC consomment des ressources PV.
+        volumeClaimTemplates:
+        - metadata:
+            name: mongodb-data
+          spec: 
+            accessModes: ["ReadWriteOnce"]
+            resources: 
+              requests:
+                storage: 1Gi 
+                
+
+

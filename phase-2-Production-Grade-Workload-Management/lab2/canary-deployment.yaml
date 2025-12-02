@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-canary
+  labels:
+    app: webapp
+    track: canary
+spec:
+  replicas: 1  # 10% of traffic ( 10  replicas in total )
+  selector:
+    matchLabels:
+      app: webapp
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: webapp
+        track: canary
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.22 # New nging image version 
+        ports:
+        - containerPort: 80
